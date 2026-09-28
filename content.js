@@ -119,14 +119,50 @@
     return bar;
   }
 
-  function showBar(text, rect, showCopy) {
+  // Source de la position de la barre : 'cells' | 'text' | null
+  let barSource = null;
+
+  function showBar(text, source) {
     const el = getBar();
     clearTimeout(feedbackTimer);
     lastLabel                = text;
     statsSpan.textContent    = text;
-    copyBtn.style.display    = showCopy ? 'inline-block' : 'none';
+    copyBtn.style.display    = source === 'cells' ? 'inline-block' : 'none';
     el.style.display         = 'block';
-    el.style.transform       = '';
+    barSource                = source;
+    positionBar();
+  }
+
+  // Rectangle englobant de ce que la barre décrit, en coordonnées viewport
+  function sourceRect() {
+    if (barSource === 'cells') {
+      // (boucle plutôt que Math.min(...arr) : évite un RangeError sur de très
+      // grandes sélections)
+      const rect = { top: Infinity, bottom: -Infinity, left: Infinity, right: -Infinity };
+      for (const c of activeCells) {
+        const r = c.getBoundingClientRect();
+        if (r.top    < rect.top)    rect.top    = r.top;
+        if (r.bottom > rect.bottom) rect.bottom = r.bottom;
+        if (r.left   < rect.left)   rect.left   = r.left;
+        if (r.right  > rect.right)  rect.right  = r.right;
+      }
+      if (rect.top === Infinity) return null;
+      rect.width  = rect.right  - rect.left;
+      rect.height = rect.bottom - rect.top;
+      return rect;
+    }
+    if (barSource === 'text') {
+      try { return window.getSelection().getRangeAt(0).getBoundingClientRect(); }
+      catch (_) { return null; }
+    }
+    return null;
+  }
+
+  function positionBar() {
+    if (!bar || bar.style.display === 'none') return;
+    const el   = bar;
+    const rect = sourceRect();
+    el.style.transform = '';
 
     const bw = el.offsetWidth;
     const bh = el.offsetHeight;
@@ -135,6 +171,8 @@
     if (rect && (rect.width || rect.height)) {
       let top  = rect.top - bh - M;
       if (top < M) top = rect.bottom + M;
+      // Rester dans la fenêtre même si la sélection en sort au défilement
+      top = Math.max(M, Math.min(top, window.innerHeight - bh - M));
       let left = rect.left + (rect.width - bw) / 2;
       left = Math.max(M, Math.min(left, window.innerWidth - bw - M));
       el.style.top  = `${top}px`;
@@ -146,8 +184,18 @@
     }
   }
 
+  // Suivre le défilement (page ou conteneur interne) et le redimensionnement
+  let posFrame = 0;
+  function schedulePosition() {
+    if (posFrame) return;
+    posFrame = requestAnimationFrame(() => { posFrame = 0; positionBar(); });
+  }
+  window.addEventListener('scroll', schedulePosition, { capture: true, passive: true });
+  window.addEventListener('resize', schedulePosition, { passive: true });
+
   function hideBar() {
     if (bar) bar.style.display = 'none';
+    barSource = null;
   }
 
   function flashCopied(ok = true) {
@@ -160,35 +208,12 @@
     }, 1200);
   }
 
-  // ── Number parsing ─────────────────────────────────────────────────────────
-  function normalise(raw) {
-    const commas = (raw.match(/,/g) || []).length;
-    const dots   = (raw.match(/\./g) || []).length;
-
-    if (commas > 0 && dots > 0) {
-      return raw.lastIndexOf(',') > raw.lastIndexOf('.')
-        ? raw.replace(/\./g, '').replace(',', '.')  // 1.234,56 → 1234.56
-        : raw.replace(/,/g, '');                    // 1,234.56 → 1234.56
-    }
-    if (commas === 1) {
-      return raw.split(',')[1].length === 3 ? raw.replace(',', '') : raw.replace(',', '.');
-    }
-    if (dots === 1) {
-      return raw.split('.')[1].length === 3 ? raw.replace('.', '') : raw;
-    }
-    if (commas > 1) return raw.replace(/,/g, '');
-    if (dots   > 1) return raw.replace(/\./g, '');
-    return raw;
-  }
-
-  function parseNumbers(text) {
-    const out = [];
-    for (const m of (text.match(/-?\d[\d,.]*/g) || [])) {
-      const n = parseFloat(normalise(m));
-      if (!isNaN(n) && isFinite(n)) out.push(n);
-    }
-    return out;
-  }
+  // ── Number parsing (parse.js) ──────────────────────────────────────────
+  // Virgule ou point décimal selon la langue déclarée par la page (lève
+  // l'ambiguïté de « 1,234 » / « 1.234 ») ; null si la page n'en déclare pas.
+  const commaDecimal = SSParse.commaDecimalFor(document.documentElement.lang);
+  const parseNumbers = text => SSParse.parseNumbers(text, commaDecimal);
+  const parseCell    = text => SSParse.parseCell(text, commaDecimal);
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
@@ -282,25 +307,17 @@
   }
 
   function updateFromCells(cells) {
-    const text  = cells.map(c => c.innerText).join('\n');
-    const nums  = parseNumbers(text);
+    // Comme un tableur : seules les cellules numériques comptent, en-têtes
+    // (th) et cellules de texte exclus
+    const nums = [];
+    for (const c of cells) {
+      if (c.tagName === 'TH') continue;
+      const n = parseCell(c.innerText);
+      if (n !== null) nums.push(n);
+    }
     const label = statsLabel(nums);
     if (!label) { hideBar(); return; }
-
-    // Bounding rect englobant toutes les cellules sélectionnées
-    // (boucle plutôt que Math.min(...arr) : évite un RangeError sur de très
-    // grandes sélections)
-    const rect = { top: Infinity, bottom: -Infinity, left: Infinity, right: -Infinity };
-    for (const c of cells) {
-      const r = c.getBoundingClientRect();
-      if (r.top    < rect.top)    rect.top    = r.top;
-      if (r.bottom > rect.bottom) rect.bottom = r.bottom;
-      if (r.left   < rect.left)   rect.left   = r.left;
-      if (r.right  > rect.right)  rect.right  = r.right;
-    }
-    rect.width  = rect.right  - rect.left;
-    rect.height = rect.bottom - rect.top;
-    showBar(label, rect, true);
+    showBar(label, 'cells');
   }
 
   // ── Copy (TSV – colle directement dans Excel / Sheets) ────────────────────
@@ -368,11 +385,7 @@
     if (!text.trim()) { hideBar(); return; }
     const label = statsLabel(parseNumbers(text));
     if (!label) { hideBar(); return; }
-    try {
-      showBar(label, sel.getRangeAt(0).getBoundingClientRect(), false);
-    } catch (_) {
-      showBar(label, null, false);
-    }
+    showBar(label, 'text');
   }
 
   // ── Event listeners ────────────────────────────────────────────────────────

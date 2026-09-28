@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Selection Stats",
-  "version": "1.4",
+  "version": "1.5",
   "description": "Affiche count, sum, average, min, max pour les nombres sélectionnés",
   "permissions": [
     "clipboardWrite",
@@ -27,6 +27,7 @@
         "https://app.smartsheet.com/*"
       ],
       "js": [
+        "parse.js",
         "content.js"
       ],
       "run_at": "document_end"
