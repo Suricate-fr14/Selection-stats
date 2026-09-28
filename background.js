@@ -56,6 +56,7 @@ chrome.action.onClicked.addListener(() => {
     // Notifier tous les onglets ouverts
     chrome.tabs.query({}, tabs => {
       for (const tab of tabs) {
+        if (tab.id == null) continue;
         chrome.tabs.sendMessage(tab.id, { type: 'SS_TOGGLE', enabled: next })
           .catch(() => {}); // onglet sans content script → ignorer
       }
