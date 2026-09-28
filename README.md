@@ -10,7 +10,10 @@ Extension Chrome (Manifest V3) qui affiche `count`, `sum`, `avg`, `min`, `max` d
   - `Ctrl` / `Cmd` + clic sur une cellule déjà sélectionnée : la retirer
   - `Shift` + clic : étendre la plage courante
   - `Échap` : tout effacer
-- **Sélection de cellules : comme un tableur**, seules les cellules numériques comptent. Une cellule est numérique si elle contient un seul nombre, éventuellement accompagné d'un symbole monétaire, de `%` ou d'une unité courte (`12 kg`, `1 234,56 €`, `$ 2,500.00`). Les en-têtes (`th`), textes (`iPhone 15`), dates et heures sont ignorés.
+- **Sélection de cellules** : toute cellule est prise en compte, texte compris.
+  - `cells` : nombre de cellules non vides sélectionnées.
+  - `count`, `sum`, `avg`, `min`, `max` : calculés sur les cellules numériques, c'est-à-dire contenant un seul nombre, éventuellement accompagné d'un symbole monétaire, de `%` ou d'une unité courte (`12 kg`, `1 234,56 €`, `$ 2,500.00`). Une cellule `toto`, `iPhone 15` ou une date compte dans `cells` mais pas dans la somme.
+  - La copie reprend le contenu de toutes les cellules sélectionnées, telles quelles.
 - **Sélection de texte classique** hors tableau : les statistiques portent sur tous les nombres du texte sélectionné, hors dates et heures.
 - **Copie** via le bouton `Copy` ou `Ctrl` / `Cmd` + `C` (au format TSV).
 - La barre **suit le défilement** de la page et reste visible dans la fenêtre.
@@ -66,7 +69,7 @@ Cas ambigus :
 ## Changelog
 
 ### 1.5
-- Cellules : seules les cellules numériques sont comptées ; en-têtes, textes, dates et heures ignorés.
+- Cellules : nouvel indicateur `cells` (cellules non vides, texte compris) ; la barre et le bouton Copy restent affichés même si la sélection ne contient aucun nombre. Les calculs portent sur les cellules numériques (textes, dates et heures exclus du calcul, pas de la copie).
 - Nombres : prise en charge des milliers séparés par espace ou apostrophe, du signe `−`, des négatifs entre parenthèses ; dates et heures ignorées ; `1,234` / `1.234` interprétés selon la langue de la page.
 - La barre suit le défilement et le redimensionnement de la fenêtre.
 - Extraction des nombres déplacée dans `parse.js`, avec tests automatiques.

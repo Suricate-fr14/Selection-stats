@@ -307,17 +307,20 @@
   }
 
   function updateFromCells(cells) {
-    // Comme un tableur : seules les cellules numériques comptent, en-têtes
-    // (th) et cellules de texte exclus
+    // Toute cellule non vide compte (texte compris, comme dans un tableur) ;
+    // somme, moyenne, min et max portent sur les cellules numériques.
+    // La barre reste affichée même sans nombre, pour garder le bouton Copy.
+    let filled = 0;
     const nums = [];
     for (const c of cells) {
-      if (c.tagName === 'TH') continue;
-      const n = parseCell(c.innerText);
+      const text = c.innerText.trim();
+      if (!text) continue;
+      filled++;
+      const n = parseCell(text);
       if (n !== null) nums.push(n);
     }
-    const label = statsLabel(nums);
-    if (!label) { hideBar(); return; }
-    showBar(label, 'cells');
+    const stats = statsLabel(nums);
+    showBar(`cells: ${filled}` + (stats ? ` | ${stats}` : ''), 'cells');
   }
 
   // ── Copy (TSV – colle directement dans Excel / Sheets) ────────────────────
