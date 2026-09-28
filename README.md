@@ -41,7 +41,7 @@ Cas ambigus :
 
 ## Tests
 
-- Automatiques (Node 18+) : `node --test tests/`
+- Automatiques (Node 18+) : `node --test`
 - Manuel : ouvrir `test.html` dans Chrome, extension activée. Pour un fichier local, autoriser « Accès aux URL de fichier » dans les détails de l'extension.
 
 ## Fichiers
