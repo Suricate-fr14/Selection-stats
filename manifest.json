@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "Selection Stats",
+  "version": "1.3",
+  "description": "Affiche count, sum, average, min, max pour les nombres sélectionnés",
+  "permissions": [
+    "clipboardWrite",
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Selection Stats — Actif"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "exclude_matches": [
+        "https://docs.google.com/spreadsheets/*",
+        "https://docs.google.com/document/*",
+        "https://docs.google.com/presentation/*",
+        "https://airtable.com/*",
+        "https://*.notion.so/*",
+        "https://app.smartsheet.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_end"
+    }
+  ]
+}

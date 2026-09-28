@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Test Selection Stats</title>
+<style>
+  body { font-family: sans-serif; padding: 40px; }
+  table { border-collapse: collapse; margin: 20px 0; }
+  td, th { border: 1px solid #ccc; padding: 8px 16px; }
+  th { background: #f0f0f0; }
+  h2 { margin-top: 40px; }
+</style>
+</head>
+<body>
+<h1>Test — Selection Stats</h1>
+
+<p style="background:#eef4fd;border-left:3px solid #1a73e8;padding:10px 14px;max-width:640px">
+  <b>Sélection :</b> glisser = plage rectangulaire ·
+  <b>Ctrl</b> (ou <b>Cmd</b>) + clic/glisser = ajouter une plage ·
+  <b>Ctrl</b> + clic sur une cellule sélectionnée = la retirer ·
+  <b>Shift</b> + clic = étendre la plage courante · <b>Échap</b> = tout effacer.
+</p>
+
+<h2>Tableau de ventes</h2>
+<table>
+  <thead>
+    <tr><th>Produit</th><th>Prix</th><th>Qté</th><th>Total</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Widget A</td><td>12,50</td><td>8</td><td>100,00</td></tr>
+    <tr><td>Widget B</td><td>7.99</td><td>15</td><td>119.85</td></tr>
+    <tr><td>Widget C</td><td>24,00</td><td>3</td><td>72,00</td></tr>
+    <tr><td>Widget D</td><td>5.50</td><td>20</td><td>110.00</td></tr>
+    <tr><td>Widget E</td><td>18,75</td><td>6</td><td>112,50</td></tr>
+  </tbody>
+</table>
+
+<h2>Résultat copié (coller ici après Ctrl+C)</h2>
+<textarea id="out" rows="6" style="width:500px;font-family:monospace" placeholder="Sélectionner des cellules → Ctrl+C → coller ici"></textarea>
+<br><br>
+<button onclick="document.getElementById('out').value=''">Effacer</button>
+
+</body>
+</html>
