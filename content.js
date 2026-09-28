@@ -13,8 +13,9 @@
   });
 
   // Toggle en temps réel via message du background
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type !== 'SS_TOGGLE') return;
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (sender.id !== chrome.runtime.id) return;
+    if (!msg || msg.type !== 'SS_TOGGLE' || typeof msg.enabled !== 'boolean') return;
     enabled = msg.enabled;
     setActiveClass(enabled);
     if (!enabled) { clearCells(); hideBar(); }
@@ -48,8 +49,9 @@
   }
 
   // ── Bar ────────────────────────────────────────────────────────────────────
-  let bar      = null;
-  let statsSpan = null;
+  let bar      = null;           // hôte (dans le DOM de la page)
+  let statsSpan = null;           // éléments internes : shadow root fermé,
+  let lastLabel = '';
   let copyBtn   = null;
   let feedbackTimer = null;
 
@@ -58,9 +60,17 @@
 
     bar = document.createElement('div');
     bar.id = '__sel-stats__';
+    // Shadow root fermé : la page ne peut ni lire, ni restyler, ni
+    // manipuler le contenu de la barre (bouton Copy compris).
+    const root  = bar.attachShadow({ mode: 'closed' });
+    const inner = document.createElement('div');
+    root.appendChild(inner);
     Object.assign(bar.style, {
       position:      'fixed',
       zIndex:        '2147483647',
+      display:       'none',
+    });
+    Object.assign(inner.style, {
       background:    '#1a73e8',
       color:         '#fff',
       font:          '700 12px/1 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif',
@@ -70,14 +80,14 @@
       boxShadow:     '0 2px 10px rgba(0,0,0,.35)',
       whiteSpace:    'nowrap',
       userSelect:    'none',
-      display:       'none',
+      display:       'flex',
       alignItems:    'center',
       gap:           '8px',
     });
 
     statsSpan = document.createElement('span');
     statsSpan.style.pointerEvents = 'none';
-    bar.appendChild(statsSpan);
+    inner.appendChild(statsSpan);
 
     copyBtn = document.createElement('button');
     copyBtn.textContent = 'Copy';
@@ -99,9 +109,11 @@
     });
     copyBtn.addEventListener('click', e => {
       e.stopPropagation();
+      // Ignorer les clics synthétiques déclenchés par la page
+      if (!e.isTrusted) return;
       copySelection();
     });
-    bar.appendChild(copyBtn);
+    inner.appendChild(copyBtn);
 
     document.documentElement.appendChild(bar);
     return bar;
@@ -109,9 +121,11 @@
 
   function showBar(text, rect, showCopy) {
     const el = getBar();
+    clearTimeout(feedbackTimer);
+    lastLabel                = text;
     statsSpan.textContent    = text;
     copyBtn.style.display    = showCopy ? 'inline-block' : 'none';
-    el.style.display         = 'flex';
+    el.style.display         = 'block';
     el.style.transform       = '';
 
     const bw = el.offsetWidth;
@@ -136,13 +150,12 @@
     if (bar) bar.style.display = 'none';
   }
 
-  function flashCopied() {
-    const orig = statsSpan.textContent;
-    statsSpan.textContent = '✓ Copied!';
+  function flashCopied(ok = true) {
+    statsSpan.textContent = ok ? '✓ Copied!' : 'Copy failed';
     copyBtn.style.display = 'none';
     clearTimeout(feedbackTimer);
     feedbackTimer = setTimeout(() => {
-      statsSpan.textContent = orig;
+      statsSpan.textContent = lastLabel;
       if (activeCells.size) copyBtn.style.display = 'inline-block';
     }, 1200);
   }
@@ -275,28 +288,42 @@
     if (!label) { hideBar(); return; }
 
     // Bounding rect englobant toutes les cellules sélectionnées
-    const rects = cells.map(c => c.getBoundingClientRect());
-    const rect  = {
-      top:    Math.min(...rects.map(r => r.top)),
-      bottom: Math.max(...rects.map(r => r.bottom)),
-      left:   Math.min(...rects.map(r => r.left)),
-      right:  Math.max(...rects.map(r => r.right)),
-    };
+    // (boucle plutôt que Math.min(...arr) : évite un RangeError sur de très
+    // grandes sélections)
+    const rect = { top: Infinity, bottom: -Infinity, left: Infinity, right: -Infinity };
+    for (const c of cells) {
+      const r = c.getBoundingClientRect();
+      if (r.top    < rect.top)    rect.top    = r.top;
+      if (r.bottom > rect.bottom) rect.bottom = r.bottom;
+      if (r.left   < rect.left)   rect.left   = r.left;
+      if (r.right  > rect.right)  rect.right  = r.right;
+    }
     rect.width  = rect.right  - rect.left;
     rect.height = rect.bottom - rect.top;
     showBar(label, rect, true);
   }
 
   // ── Copy (TSV – colle directement dans Excel / Sheets) ────────────────────
+  // Injection de formule (CSV/TSV injection) : un contenu de page commençant
+  // par = + - @ serait interprété comme formule une fois collé dans un tableur
+  // (ex. =HYPERLINK(...), DDE). On le neutralise avec une apostrophe, sauf
+  // pour les nombres (ex. -12,5) qui doivent rester numériques.
+  function sanitizeCell(val) {
+    if (/^[=+\-@\t\r]/.test(val) && !/^[+-]?\d[\d\s.,]*%?$/.test(val)) {
+      return `'${val}`;
+    }
+    return val;
+  }
+
   function buildTSV(cells) {
     // Regrouper les cellules par ligne de tableau (cells déjà en ordre document)
     const rows = new Map();
     for (const cell of cells) {
       const row = cell.parentElement;
       if (!rows.has(row)) rows.set(row, []);
-      const val = cell.innerText.trim();
-      // TSV : si le contenu contient \n ou \t ou ", on l'encadre de guillemets
-      rows.get(row).push(/[\n\t"]/.test(val) ? `"${val.replace(/"/g, '""')}"` : val);
+      const val = sanitizeCell(cell.innerText.trim());
+      // TSV : si le contenu contient \n, \r, \t ou ", on l'encadre de guillemets
+      rows.get(row).push(/[\n\r\t"]/.test(val) ? `"${val.replace(/"/g, '""')}"` : val);
     }
     return [...rows.values()].map(r => r.join('\t')).join('\n');
   }
@@ -309,11 +336,12 @@
       const ta = document.createElement('textarea');
       ta.value = tsv;
       ta.style.cssText = 'position:fixed;opacity:0';
-      document.body.appendChild(ta);
+      (document.body || document.documentElement).appendChild(ta);
       ta.select();
-      document.execCommand('copy');
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) {}
       ta.remove();
-      flashCopied();
+      flashCopied(ok);
     });
   }
 
@@ -424,12 +452,20 @@
     textTimer = setTimeout(updateFromText, 60);
   });
 
+  function isEditable(el) {
+    return !!el && (el.isContentEditable ||
+      /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  }
+
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape' && activeCells.size) {
+    if (!enabled || !activeCells.size) return;
+    if (e.key === 'Escape') {
       clearCells();
       hideBar();
     }
-    if ((e.ctrlKey || e.metaKey) && e.key === 'c' && activeCells.size) {
+    // Ne pas détourner Ctrl+C si l'utilisateur est dans un champ de saisie
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'c'
+        && !isEditable(document.activeElement)) {
       e.preventDefault();
       copySelection();
     }
