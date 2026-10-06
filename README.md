@@ -36,7 +36,7 @@ Hors tableau, les statistiques portent sur tous les nombres du texte sélectionn
 
 ### Activation et options
 
-- Clic sur l'icône de l'extension : activer (vert) / désactiver (rouge). L'état est mémorisé.
+- Clic sur l'icône de l'extension : activer (icône bleue) / désactiver (icône grise). L'état est mémorisé.
 - Clic droit sur l'icône → **Options** :
   - indicateurs affichés (par défaut : cellules, nombre, somme, moyenne, min, max) ;
   - nombre de décimales (0 à 6, défaut 2) ;
@@ -84,7 +84,7 @@ Mise à jour : une extension non empaquetée ne se met pas à jour toute seule. 
 | `stats.js` | Calcul et mise en forme des statistiques |
 | `content.js` | Sélection, barre d'affichage, copie |
 | `options.html`, `options.js` | Page d'options |
-| `icons/` | Icônes (actif `on-*`, désactivé `off-*`) |
+| `icons/` | Icônes grille + sélection (actif `on-*` bleu, désactivé `off-*` gris) |
 | `test.html` | Page de test manuel |
 | `tests/` | Tests automatiques (`parse`, `stats`, `settings`) |
 
@@ -98,6 +98,9 @@ Mise à jour : une extension non empaquetée ne se met pas à jour toute seule. 
 - Aucune donnée n'est envoyée hors du navigateur ; seuls l'état actif / désactivé (`chrome.storage.local`) et les options (`chrome.storage.sync`) sont stockés.
 
 ## Changelog
+
+### 1.7.1
+- Nouvelle icône : grille avec sélection de cellules (bleue = actif, grise = désactivé).
 
 ### 1.7
 - Grilles ARIA (`div` avec `role="grid"`, `"table"`, `"treegrid"`) prises en charge.
