@@ -188,7 +188,13 @@
   let posFrame = 0;
   function schedulePosition() {
     if (posFrame) return;
-    posFrame = requestAnimationFrame(() => { posFrame = 0; positionBar(); });
+    posFrame = requestAnimationFrame(() => {
+      posFrame = 0;
+      // Défilement pendant un glisser (molette, clavier, bord de fenêtre) :
+      // la cellule sous le pointeur change sans mousemove → étendre la plage
+      if (isDragging) extendDragAt(lastX, lastY);
+      positionBar();
+    });
   }
   window.addEventListener('scroll', schedulePosition, { capture: true, passive: true });
   window.addEventListener('resize', schedulePosition, { passive: true });
@@ -430,18 +436,50 @@
 
     lastHoverCell = cell;
     isDragging    = true;
+    lastX         = e.clientX;
+    lastY         = e.clientY;
+    if (!edgeFrame) edgeFrame = requestAnimationFrame(edgeScrollTick);
     refreshSelection();
     // Empêcher la sélection de texte pendant le drag
     document.documentElement.style.userSelect = 'none';
   });
 
-  document.addEventListener('mousemove', e => {
+  // ── Glisser : extension de plage et défilement automatique ────────────────
+  let lastX = 0, lastY = 0;     // dernière position du pointeur (viewport)
+  let edgeFrame = 0;
+
+  function extendDragTo(cell) {
     if (!enabled || !isDragging || !anchorCell) return;
-    const cell = toCell(e.target);
     if (!cell || cell === lastHoverCell) return;
     lastHoverCell = cell;
     rangeCells    = rangeOf(anchorCell, cell);
     refreshSelection();
+  }
+
+  function extendDragAt(x, y) {
+    const cx = Math.max(0, Math.min(x, window.innerWidth  - 1));
+    const cy = Math.max(0, Math.min(y, window.innerHeight - 1));
+    extendDragTo(toCell(document.elementFromPoint(cx, cy)));
+  }
+
+  // Pointeur près du bord haut/bas (ou hors fenêtre) pendant un glisser :
+  // faire défiler la page, plus vite à mesure qu'on s'éloigne du bord
+  function edgeScrollTick() {
+    edgeFrame = 0;
+    if (!enabled || !isDragging) return;
+    const EDGE = 40, MAX = 40;
+    let dy = 0;
+    if (lastY < EDGE) dy = -Math.min(MAX, (EDGE - lastY) / 2);
+    else if (lastY > window.innerHeight - EDGE) dy = Math.min(MAX, (lastY - window.innerHeight + EDGE) / 2);
+    if (dy) window.scrollBy(0, dy);
+    edgeFrame = requestAnimationFrame(edgeScrollTick);
+  }
+
+  document.addEventListener('mousemove', e => {
+    if (!enabled || !isDragging || !anchorCell) return;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    extendDragTo(toCell(e.target));
   });
 
   document.addEventListener('mouseup', () => {
