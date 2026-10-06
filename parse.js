@@ -99,6 +99,9 @@
   // monétaire, d'un % ou d'une unité courte. Sinon (texte, date, « iPhone 15 »)
   // la cellule n'est pas numérique → null.
   function parseCell(text, commaDecimal = null) {
+    // Dans une cellule, « 105 000 » (espace normale, sans décimales) est un
+    // seul nombre : on traite l'espace comme une espace insécable
+    text = text.replace(/(?<![\d.,])\d{1,3}(?: \d{3})+(?!\d)/g, m => m.replace(/ /g, '\u00a0'));
     let found = null;
     for (const t of tokens(text, commaDecimal)) {
       if (found) return null;

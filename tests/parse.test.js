@@ -51,6 +51,9 @@ test('cellule : uniquement les cellules numériques', () => {
     ['EUR 10', 10],
     ['15 %', 15],
     ['2024', 2024],
+    ['105 000', 105000],                 // espace normale, sans décimales
+    ['1 234 567 €', 1234567],
+    ['10 20', null],                     // pas un groupe de milliers
     ['iPhone 15', null],
     ['Widget 3', null],
     ['2024-01-15', null],

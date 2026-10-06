@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
   "name": "Selection Stats",
-  "version": "1.6",
+  "version": "1.7",
   "description": "Affiche count, sum, average, min, max pour les nombres sélectionnés",
+  "icons": {
+    "16": "icons/on-16.png",
+    "32": "icons/on-32.png",
+    "48": "icons/on-48.png",
+    "128": "icons/on-128.png"
+  },
   "permissions": [
     "clipboardWrite",
     "storage"
@@ -11,26 +17,31 @@
     "service_worker": "background.js"
   },
   "action": {
-    "default_title": "Selection Stats — Actif"
+    "default_title": "Selection Stats — Actif",
+    "default_icon": {
+      "16": "icons/on-16.png",
+      "32": "icons/on-32.png",
+      "48": "icons/on-48.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
   },
   "content_scripts": [
     {
       "matches": [
         "<all_urls>"
       ],
-      "exclude_matches": [
-        "https://docs.google.com/spreadsheets/*",
-        "https://docs.google.com/document/*",
-        "https://docs.google.com/presentation/*",
-        "https://airtable.com/*",
-        "https://*.notion.so/*",
-        "https://app.smartsheet.com/*"
-      ],
       "js": [
+        "settings.js",
         "parse.js",
+        "stats.js",
         "content.js"
       ],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": true,
+      "match_about_blank": true
     }
   ]
 }

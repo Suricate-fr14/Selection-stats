@@ -1,32 +1,54 @@
 (() => {
   'use strict';
 
-  // ── Enabled state ─────────────────────────────────────────────────────────
-  let enabled = true;
+  // ── State & settings ──────────────────────────────────────────────────────
+  // enabled = activé par l'utilisateur (icône) ET site non exclu (options)
+  let userEnabled  = true;
+  let siteExcluded = false;
+  let enabled      = true;
+  let settings     = SSSettings.normalize(null);
+  let locale       = SSSettings.resolveLocale(settings.locale, navigator.language);
+
+  function applyState() {
+    siteExcluded = SSSettings.isExcluded(location.href, settings.excluded);
+    locale       = SSSettings.resolveLocale(settings.locale, navigator.language);
+    enabled      = userEnabled && !siteExcluded;
+    setActiveClass(enabled);
+    if (!enabled) { clearCells(); hideBar(); return; }
+    if (copyBtn) copyBtn.textContent = SSStats.labelsFor(locale).copy;
+    // Réafficher avec les nouveaux réglages
+    if (activeCells.size) refreshSelection();
+    else { lastText = ''; updateFromText(); }
+  }
 
   // Appliquer immédiatement (défaut = actif), puis corriger depuis le storage
-  setActiveClass(true);
+  setActiveClass(!SSSettings.isExcluded(location.href, settings.excluded));
   chrome.storage.local.get('enabled', r => {
-    enabled = r.enabled !== false;
-    setActiveClass(enabled);
-    if (!enabled) { clearCells(); hideBar(); }
+    userEnabled = r.enabled !== false;
+    chrome.storage.sync.get('settings', r2 => {
+      settings = SSSettings.normalize(r2 && r2.settings);
+      applyState();
+    });
   });
 
   // Toggle en temps réel via message du background
   chrome.runtime.onMessage.addListener((msg, sender) => {
     if (sender.id !== chrome.runtime.id) return;
     if (!msg || msg.type !== 'SS_TOGGLE' || typeof msg.enabled !== 'boolean') return;
-    enabled = msg.enabled;
-    setActiveClass(enabled);
-    if (!enabled) { clearCells(); hideBar(); }
+    userEnabled = msg.enabled;
+    applyState();
   });
 
-  // Fallback : storage.onChanged (si message non reçu)
-  chrome.storage.onChanged.addListener((changes) => {
-    if (!('enabled' in changes)) return;
-    enabled = changes.enabled.newValue !== false;
-    setActiveClass(enabled);
-    if (!enabled) { clearCells(); hideBar(); }
+  // Fallback (si message non reçu) + modification des options
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && 'enabled' in changes) {
+      userEnabled = changes.enabled.newValue !== false;
+      applyState();
+    }
+    if (area === 'sync' && 'settings' in changes) {
+      settings = SSSettings.normalize(changes.settings.newValue);
+      applyState();
+    }
   });
 
   // ── CSS (cell highlight + cursor, conditionné à .__ss-on__) ──────────────────
@@ -38,8 +60,8 @@
         outline: 1.5px solid #1a73e8 !important;
         outline-offset: -1px !important;
       }
-      .__ss-on__ table td,
-      .__ss-on__ table th { cursor: cell; }
+      .__ss-on__ :is(table td, table th, [role="gridcell"], [role="cell"],
+                     [role="columnheader"], [role="rowheader"]) { cursor: cell; }
     `;
     (document.head || document.documentElement).appendChild(s);
   })();
@@ -69,6 +91,8 @@
       position:      'fixed',
       zIndex:        '2147483647',
       display:       'none',
+      // Fenêtre étroite (iframe, mobile) : la barre passe sur plusieurs lignes
+      maxWidth:      'calc(100vw - 16px)',
     });
     Object.assign(inner.style, {
       background:    '#1a73e8',
@@ -87,10 +111,12 @@
 
     statsSpan = document.createElement('span');
     statsSpan.style.pointerEvents = 'none';
+    statsSpan.style.whiteSpace    = 'normal';
+    statsSpan.style.lineHeight    = '1.35';
     inner.appendChild(statsSpan);
 
     copyBtn = document.createElement('button');
-    copyBtn.textContent = 'Copy';
+    copyBtn.textContent = SSStats.labelsFor(locale).copy;
     Object.assign(copyBtn.style, {
       background:   'rgba(255,255,255,.22)',
       border:       '1px solid rgba(255,255,255,.5)',
@@ -125,6 +151,8 @@
   function showBar(text, source) {
     const el = getBar();
     clearTimeout(feedbackTimer);
+    // « clé: valeur » insécable : un retour à la ligne ne coupe qu'entre deux indicateurs
+    text                     = text.replace(/: /g, ':\u00a0');
     lastLabel                = text;
     statsSpan.textContent    = text;
     copyBtn.style.display    = source === 'cells' ? 'inline-block' : 'none';
@@ -205,7 +233,8 @@
   }
 
   function flashCopied(ok = true) {
-    statsSpan.textContent = ok ? '✓ Copied!' : 'Copy failed';
+    const L = SSStats.labelsFor(locale);
+    statsSpan.textContent = ok ? L.copied : L.copyFailed;
     copyBtn.style.display = 'none';
     clearTimeout(feedbackTimer);
     feedbackTimer = setTimeout(() => {
@@ -221,18 +250,12 @@
   const parseNumbers = text => SSParse.parseNumbers(text, commaDecimal);
   const parseCell    = text => SSParse.parseCell(text, commaDecimal);
 
-  // ── Stats ──────────────────────────────────────────────────────────────────
-  function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
-
-  function statsLabel(nums) {
-    if (!nums.length) return null;
-    let sum = 0, min = nums[0], max = nums[0];
-    for (const n of nums) {
-      sum += n;
-      if (n < min) min = n;
-      if (n > max) max = n;
-    }
-    return `count: ${nums.length} | sum: ${r2(sum)} | avg: ${r2(sum / nums.length)} | min: ${r2(min)} | max: ${r2(max)}`;
+  // ── Stats (stats.js) ───────────────────────────────────────────────────────
+  function statsLabel(nums, cells = null) {
+    return SSStats.buildLabel(
+      { cells, stats: SSStats.computeStats(nums) },
+      { show: settings.stats, decimals: settings.decimals, locale }
+    );
   }
 
   // ── Cell selection ─────────────────────────────────────────────────────────
@@ -248,34 +271,75 @@
   let rangeCells    = [];         // plage en cours
   let activeCells   = new Set();  // résultat affiché (ordre = ordre du document)
 
-  function toCell(el) { return el?.closest('td,th') || null; }
+  // Tableaux HTML et grilles ARIA (div role="grid" / "table" / "treegrid")
+  const CELL_SEL = 'td,th,[role="gridcell"],[role="cell"],[role="columnheader"],[role="rowheader"]';
+  const GRID_SEL = 'table,[role="grid"],[role="table"],[role="treegrid"]';
+  const ROW_SEL  = 'tr,[role="row"]';
+
+  function gridOf(cell) { return cell.closest(GRID_SEL); }
+  function rowOf(cell)  { return cell.closest(ROW_SEL); }
+
+  function toCell(el) {
+    const cell = el && el.closest ? el.closest(CELL_SEL) : null;
+    return cell && gridOf(cell) && rowOf(cell) ? cell : null;
+  }
+
+  function rowsOf(grid) {
+    if (grid.tagName === 'TABLE') return Array.from(grid.rows);
+    return Array.from(grid.querySelectorAll('[role="row"]'))
+      .filter(r => r.closest(GRID_SEL) === grid);
+  }
+
+  function cellsOf(row) {
+    if (row.tagName === 'TR') return Array.from(row.cells);
+    return Array.from(row.querySelectorAll(CELL_SEL))
+      .filter(c => c.closest(ROW_SEL) === row);
+  }
 
   function sameTable(a, b) {
-    return a && b && a.closest('table') && a.closest('table') === b.closest('table');
+    return a && b && gridOf(a) && gridOf(a) === gridOf(b);
   }
 
   function cellPos(cell) {
-    const table = cell.closest('table');
-    if (!table) return null;
-    return {
-      table,
-      row: Array.from(table.rows).indexOf(cell.parentElement),
-      col: Array.from(cell.parentElement.cells).indexOf(cell),
-    };
+    const grid = gridOf(cell), row = rowOf(cell);
+    if (!grid || !row) return null;
+    const rows = rowsOf(grid);
+    const r = rows.indexOf(row);
+    const c = cellsOf(row).indexOf(cell);
+    if (r < 0 || c < 0) return null;
+    return { grid, rows, row: r, col: c };
   }
 
   function rangeOf(a, b) {
     const pa = cellPos(a), pb = cellPos(b);
-    if (!pa || !pb || pa.table !== pb.table) return [a];
+    if (!pa || !pb || pa.grid !== pb.grid) return [a];
     const r0 = Math.min(pa.row, pb.row), r1 = Math.max(pa.row, pb.row);
     const c0 = Math.min(pa.col, pb.col), c1 = Math.max(pa.col, pb.col);
     const out = [];
     for (let r = r0; r <= r1; r++) {
-      const row = pa.table.rows[r];
-      if (!row) continue;
+      const cells = cellsOf(pa.rows[r]);
       for (let c = c0; c <= c1; c++) {
-        if (row.cells[c]) out.push(row.cells[c]);
+        if (cells[c]) out.push(cells[c]);
       }
+    }
+    return out;
+  }
+
+  // Alt+clic : colonne entière ; dans la 1re colonne (hors ligne d'en-tête),
+  // ligne entière
+  function isHeaderRow(cell, pos) {
+    return pos.row === 0 || !!cell.closest('thead') ||
+      cell.getAttribute('role') === 'columnheader';
+  }
+
+  function lineOf(cell) {
+    const pos = cellPos(cell);
+    if (!pos) return [cell];
+    if (pos.col === 0 && !isHeaderRow(cell, pos)) return cellsOf(pos.rows[pos.row]);
+    const out = [];
+    for (const row of pos.rows) {
+      const c = cellsOf(row)[pos.col];
+      if (c) out.push(c);
     }
     return out;
   }
@@ -325,8 +389,8 @@
       const n = parseCell(text);
       if (n !== null) nums.push(n);
     }
-    const stats = statsLabel(nums);
-    showBar(`cells: ${filled}` + (stats ? ` | ${stats}` : ''), 'cells');
+    // Barre affichée même si aucun indicateur ne l'est, pour garder Copier
+    showBar(statsLabel(nums, filled) || '', 'cells');
   }
 
   // ── Copy (TSV – colle directement dans Excel / Sheets) ────────────────────
@@ -345,7 +409,7 @@
     // Regrouper les cellules par ligne de tableau (cells déjà en ordre document)
     const rows = new Map();
     for (const cell of cells) {
-      const row = cell.parentElement;
+      const row = rowOf(cell);
       if (!rows.has(row)) rows.set(row, []);
       const val = sanitizeCell(cell.innerText.trim());
       // TSV : si le contenu contient \n, \r, \t ou ", on l'encadre de guillemets
@@ -412,6 +476,26 @@
 
     const additive = e.ctrlKey || e.metaKey;   // Ctrl (Win/Linux) ou Cmd (Mac)
     const extend   = e.shiftKey;
+
+    if (e.altKey && !extend) {
+      // Alt+clic → colonne (ou ligne) entière ; Ctrl+Alt+clic → l'ajouter,
+      // ou la retirer si elle est déjà entièrement sélectionnée
+      const line = lineOf(cell);
+      if (additive) {
+        baseCells = new Set(composeSelection());
+        dragMode  = line.every(c => baseCells.has(c)) ? 'remove' : 'add';
+      } else {
+        baseCells = new Set();
+        dragMode  = 'add';
+      }
+      anchorCell    = cell;
+      lastHoverCell = cell;
+      rangeCells    = line;
+      isDragging    = false;
+      e.preventDefault();
+      refreshSelection();
+      return;
+    }
 
     if (extend && anchorCell && sameTable(anchorCell, cell)) {
       // Shift+clic → redéfinir la plage courante depuis l'ancre existante,
@@ -489,11 +573,11 @@
     if (!activeCells.size) updateFromText();
   });
 
-  // Ctrl/Cmd/Shift + clic dans une cellule : neutraliser le comportement natif
-  // (ouverture d'un lien dans un nouvel onglet, handlers de la page, etc.)
+  // Ctrl/Cmd/Shift/Alt + clic dans une cellule : neutraliser le comportement
+  // natif (lien ouvert dans un nouvel onglet, téléchargé avec Alt, etc.)
   document.addEventListener('click', e => {
     if (!enabled) return;
-    if (!(e.ctrlKey || e.metaKey || e.shiftKey)) return;
+    if (!(e.ctrlKey || e.metaKey || e.shiftKey || e.altKey)) return;
     if (!toCell(e.target)) return;
     if (bar && bar.contains(e.target)) return;
     e.preventDefault();

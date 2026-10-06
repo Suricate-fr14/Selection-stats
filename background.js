@@ -1,34 +1,16 @@
-// ── Icon generation ──────────────────────────────────────────────────────────
-function makeIcon(size, color) {
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx    = canvas.getContext('2d');
-  const r      = size / 2 - 1;
-  const c      = size / 2;
-
-  // Fond transparent + cercle coloré
-  ctx.clearRect(0, 0, size, size);
-  ctx.beginPath();
-  ctx.arc(c, c, r, 0, Math.PI * 2);
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  // Lettre "S" blanche au centre
-  ctx.fillStyle = '#fff';
-  ctx.font      = `bold ${Math.round(size * 0.55)}px sans-serif`;
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('S', c, c + 0.5);
-
-  return ctx.getImageData(0, 0, size, size);
+// ── Icon ─────────────────────────────────────────────────────────────────────
+function iconSet(state) {
+  return {
+    16: `icons/${state}-16.png`,
+    32: `icons/${state}-32.png`,
+    48: `icons/${state}-48.png`,
+  };
 }
 
 function applyIcon(enabled) {
-  const color = enabled ? '#22c55e' : '#ef4444';
-  chrome.action.setIcon({
-    imageData: { 16: makeIcon(16, color), 32: makeIcon(32, color) }
-  });
+  chrome.action.setIcon({ path: iconSet(enabled ? 'on' : 'off') });
   chrome.action.setTitle({
-    title: `Selection Stats — ${enabled ? 'Actif' : 'Désactivé'}`
+    title: `Selection Stats — ${enabled ? 'Actif' : 'Désactivé'} (clic droit → Options)`
   });
 }
 
