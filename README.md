@@ -17,6 +17,7 @@ Extension Chrome (Manifest V3) qui affiche `count`, `sum`, `avg`, `min`, `max` d
 - **Sélection de texte classique** hors tableau : les statistiques portent sur tous les nombres du texte sélectionné, hors dates et heures.
 - **Copie** via le bouton `Copy` ou `Ctrl` / `Cmd` + `C` (au format TSV).
 - La barre **suit le défilement** de la page et reste visible dans la fenêtre.
+- **Défilement pendant un glisser** : la sélection s'étend quand on fait défiler la page à la molette en gardant le bouton gauche enfoncé, et la page défile d'elle-même quand on glisse vers le bord haut ou bas de la fenêtre.
 
 ## Formats numériques reconnus
 
@@ -67,6 +68,10 @@ Cas ambigus :
 - Aucune donnée n'est envoyée hors du navigateur ; seul l'état actif / désactivé est stocké (`chrome.storage.local`).
 
 ## Changelog
+
+### 1.6
+- La sélection de cellules s'étend pendant un défilement à la molette en cours de glisser.
+- Défilement automatique de la page quand on glisse vers le bord haut ou bas de la fenêtre.
 
 ### 1.5
 - Cellules : nouvel indicateur `cells` (cellules non vides, texte compris) ; la barre et le bouton Copy restent affichés même si la sélection ne contient aucun nombre. Les calculs portent sur les cellules numériques (textes, dates et heures exclus du calcul, pas de la copie).
